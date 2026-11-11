@@ -10,6 +10,7 @@ typedef enum {
 typedef struct {
   CliAction action;
   char **command_argv;
+  unsigned int cpu_limit_seconds;
 } CliOptions;
 
 int cli_parse(int argc, char *argv[], CliOptions *options);
