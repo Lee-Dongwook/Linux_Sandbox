@@ -6,8 +6,9 @@
 #include <errno.h>
 
 #include "process.h"
+#include "resource.h"
 
-int process_execute(char *const command_argv[]) {
+int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds) {
 
   if (command_argv == NULL || command_argv[0] == NULL) {
     fprintf(stderr, "Invalid command.\n");
@@ -22,6 +23,13 @@ int process_execute(char *const command_argv[]) {
   }
 
   if (child_pid == 0) {
+
+    if (cpu_limit_seconds > 0) {
+        if (resource_apply_cpu_limit(cpu_limit_seconds) != 0) {
+            perror("setrlimit(RLIMIT_CPU)");
+            _exit(126);
+        }
+    }
     execvp(command_argv[0], command_argv);
 
     perror("execvp");
