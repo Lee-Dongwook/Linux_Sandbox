@@ -1,6 +1,6 @@
 #ifndef PROCESS_H
 #define PROCESS_H
 
-int process_demo(void);
+int process_execute(char *const command_argv[]);
 
 #endif

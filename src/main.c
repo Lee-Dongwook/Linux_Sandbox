@@ -13,17 +13,15 @@ int main(int argc, char *argv[]) {
   switch (options.action) {
         case CLI_ACTION_HELP:
             cli_print_help(argv[0]);
-            break;
+            return 0;
 
         case CLI_ACTION_VERSION:
             printf("Mini-Sandbox version 0.1.0\n");
-            break;
+            return 0;
 
         case CLI_ACTION_RUN:
-          if (process_demo() != 0) {
-              return 1;
-          }
-          break;
-  }
-  return 0;
+            return process_execute(options.command_argv);
+    }
+
+  return 1;
 }

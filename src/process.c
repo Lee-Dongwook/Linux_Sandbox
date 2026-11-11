@@ -3,16 +3,18 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/wait.h>
+#include <errno.h>
 
 #include "process.h"
 
-int process_demo(void) {
-  pid_t child_pid;
+int process_execute(char *const command_argv[]) {
 
-  printf("[Parent] Starting process demo.\n");
-  printf("[Parent] PID: %d\n", (int)getpid());
-
-  child_pid = fork();
+  if (command_argv == NULL || command_argv[0] == NULL) {
+    fprintf(stderr, "Invalid command.\n");
+    return -1;
+  }
+  
+  pid_t child_pid = fork();
 
   if (child_pid < 0) {
     perror("fork");
@@ -20,17 +22,18 @@ int process_demo(void) {
   }
 
   if (child_pid == 0) {
-    printf("[Child] PID: %d\n", (int)getpid());
-    printf("[Child] PPID: %d\n", (int)getppid());
+    execvp(command_argv[0], command_argv);
 
-    fflush(stdout);
-    _exit(EXIT_SUCCESS);
+    perror("execvp");
+    _exit(127);
   }
 
-  printf("[Parent] Created child PID: %d\n", (int)child_pid);
-
   int status;
-  pid_t result = waitpid(child_pid, &status, 0);
+  pid_t result;
+
+  do {
+    result = waitpid(child_pid, &status, 0);
+  } while (result < 0 && errno == EINTR);
 
   if (result < 0) {
     perror("waitpid");
@@ -38,13 +41,16 @@ int process_demo(void) {
   }
 
   if (WIFEXITED(status)) {
-    printf(
-            "[Parent] Child exited with status: %d\n",
-            WEXITSTATUS(status)
-        );
+    return WEXITSTATUS(status);
   }
 
-  printf("[Parent] Process demo completed.\n");
+  if (WIFSIGNALED(status)) {
+    int signal_number = WTERMSIG(status);
 
-  return 0;
+    fprintf(stderr, "Child terminated by signal: %d\n", signal_number);
+
+    return 128 + signal_number;
+  }
+
+  return -1;
 }
