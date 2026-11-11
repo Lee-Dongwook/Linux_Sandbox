@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include "cli.h"
+#include "process.h"
 
 int main(int argc, char *argv[]) {
   CliOptions options;
@@ -19,8 +20,10 @@ int main(int argc, char *argv[]) {
             break;
 
         case CLI_ACTION_RUN:
-            printf("Run command is not implemented yet.\n");
-            break;
+          if (process_demo() != 0) {
+              return 1;
+          }
+          break;
   }
   return 0;
 }
