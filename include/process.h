@@ -17,8 +17,8 @@ typedef struct {
   ProcessTerminationReason termination_reason;
 } ProcessResult;
 
-int process_execute(char *const command_argv[],
-                    unsigned int cpu_limit_seconds,
-                    unsigned int timeout_seconds);
+int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
+                    unsigned int timeout_seconds,
+                    unsigned long memory_limit_mb);
 
 #endif

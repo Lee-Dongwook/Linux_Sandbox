@@ -44,6 +44,7 @@ int cli_parse(int argc, char *argv[], CliOptions *options) {
     options->command_argv = NULL;
     options->cpu_limit_seconds = 0;
     options->timeout_seconds = 0;
+    options->memory_limit_mb = 0;
 
     if (argc < 2) {
         options->action = CLI_ACTION_HELP;
