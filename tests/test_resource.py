@@ -129,3 +129,35 @@ finally:
 
     assert result.returncode == 0
     assert "file descriptor limit reached" in result.stdout
+
+def test_inherited_file_descriptors_are_closed(tmp_path):
+    result = subprocess.run(
+        [
+            str(SANDBOX),
+            "run",
+            "--",
+            "python3",
+            "-c",
+            """
+import os
+
+open_fds = []
+
+for fd in range(3, 256):
+    try:
+        os.fstat(fd)
+        open_fds.append(fd)
+    except OSError:
+        pass
+
+print(open_fds)
+""",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        timeout=5,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == "[]"

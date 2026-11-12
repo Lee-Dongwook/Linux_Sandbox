@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <sys/types.h>
+#include <sys/resource.h>
 #include <sys/wait.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -87,6 +88,37 @@ static int read_exec_error(int error_fd, int *exec_error) {
   return received == sizeof(*exec_error) ? 1 : 0;
 }
 
+static int close_inherited_fds(int keep_fd)
+{
+    struct rlimit limit;
+
+    if (getrlimit(RLIMIT_NOFILE, &limit) == -1) {
+        return -1;
+    }
+
+    rlim_t max_fd = limit.rlim_cur;
+
+    if (max_fd == RLIM_INFINITY) {
+        long open_max = sysconf(_SC_OPEN_MAX);
+
+        if (open_max < 0) {
+            return -1;
+        }
+
+        max_fd = (rlim_t)open_max;
+    }
+
+    for (rlim_t fd = 3; fd < max_fd; fd++) {
+        if ((int)fd == keep_fd) {
+            continue;
+        }
+
+        close((int)fd);
+    }
+
+    return 0;
+}
+
 int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
                     unsigned int timeout_seconds, unsigned long memory_limit_mb, unsigned long file_size_limit_mb, unsigned int nofile_limit) {
 
@@ -125,6 +157,11 @@ int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
     if (setpgid(0, 0) == -1) {
       perror("setpgid");
       _exit(126);
+    }
+
+    if (close_inherited_fds(exec_error_pipe[1]) == -1) {
+        perror("close_inherited_fds");
+        _exit(126);
     }
 
     if (memory_limit_mb > 0) {
