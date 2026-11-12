@@ -12,8 +12,10 @@ void cli_print_help(const char *program_name) {
     printf("Usage:\n");
     printf("  %s --help\n", program_name);
     printf("  %s --version\n", program_name);
-    printf("  %s run [--cpu seconds] -- [command] [args...]\n",
-           program_name);
+    printf(
+    "  %s run [--cpu seconds] [--timeout seconds] -- [command] [args...]\n",
+    program_name
+    );
 }
 
 static int parse_cpu_limit(const char *value,
@@ -41,6 +43,7 @@ int cli_parse(int argc, char *argv[], CliOptions *options) {
 
     options->command_argv = NULL;
     options->cpu_limit_seconds = 0;
+    options->timeout_seconds = 0;
 
     if (argc < 2) {
         options->action = CLI_ACTION_HELP;
@@ -76,6 +79,21 @@ int cli_parse(int argc, char *argv[], CliOptions *options) {
           continue;
         }
 
+        if (strcmp(argv[index], "--timeout") == 0) {
+          if (index + 1 >= argc) {
+            fprintf(stderr, "Missing value for --timeout\n");
+            return -1;
+          }
+
+          if (parse_cpu_limit(argv[index + 1], &options->timeout_seconds) !=
+              0) {
+            fprintf(stderr, "Invalid timeout\n");
+            return -1;
+          }
+          index += 2;
+          continue;
+        }
+
         fprintf(stderr, "Unknown option: %s\n", argv[index]);
         return -1;
       }
@@ -83,7 +101,7 @@ int cli_parse(int argc, char *argv[], CliOptions *options) {
       if (index >= argc || index + 1 >= argc) {
             fprintf(
                 stderr,
-                "Usage: %s run [--cpu seconds] -- [command] [args...]\n",
+                "Usage: %s run [--cpu seconds] [--timeout seconds] -- [command] [args...]\n",
                 argv[0]
             );
             return -1;

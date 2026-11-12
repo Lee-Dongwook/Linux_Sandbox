@@ -5,10 +5,12 @@
 #include <sys/wait.h>
 #include <errno.h>
 
+#include "monitor.h"
 #include "process.h"
 #include "resource.h"
 
-int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds) {
+int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
+                    unsigned int timeout_seconds) {
 
   if (command_argv == NULL || command_argv[0] == NULL) {
     fprintf(stderr, "Invalid command.\n");
@@ -37,15 +39,18 @@ int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds) 
   }
 
   int status;
-  pid_t result;
 
-  do {
-    result = waitpid(child_pid, &status, 0);
-  } while (result < 0 && errno == EINTR);
+  int monitor_result =
+      monitor_wait_for_process(child_pid, timeout_seconds, &status);
 
-  if (result < 0) {
-    perror("waitpid");
+  if (monitor_result == -1) {
+    perror("monitor_wait_for_process");
     return -1;
+  }
+
+  if (monitor_result == 1) {
+    fprintf(stderr, "Execution timed out.\n");
+    return 124;
   }
 
   if (WIFEXITED(status)) {
