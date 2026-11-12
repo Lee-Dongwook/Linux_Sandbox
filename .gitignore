@@ -1,6 +1,7 @@
 
 # Compiled binaries
 sandbox
+sandbox.jsonl
 *.o
 *.a
 *.so
