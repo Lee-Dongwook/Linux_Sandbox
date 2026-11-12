@@ -26,6 +26,11 @@ int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
 
   if (child_pid == 0) {
 
+    if (setpgid(0, 0) == -1) {
+      perror("setpgid");
+      _exit(126);
+    }
+
     if (cpu_limit_seconds > 0) {
         if (resource_apply_cpu_limit(cpu_limit_seconds) != 0) {
             perror("setrlimit(RLIMIT_CPU)");

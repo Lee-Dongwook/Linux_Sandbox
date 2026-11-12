@@ -57,7 +57,7 @@ int monitor_wait_for_process(pid_t pid, unsigned int timeout_seconds,
       }
 
       if (has_timed_out(&start, &now, timeout_seconds)) {
-        if (kill(pid, SIGKILL) == -1 && errno != ESRCH) {
+        if (kill(-pid, SIGKILL) == -1 && errno != ESRCH) {
           return -1;
         }
 
