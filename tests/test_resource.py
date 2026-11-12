@@ -1,4 +1,4 @@
-
+import signal
 import subprocess
 from pathlib import Path
 
@@ -25,5 +25,5 @@ def test_cpu_limit(tmp_path):
         timeout=5,
     )
 
-    assert result.returncode != 0
-    assert result.returncode != 124
+    assert result.returncode == 128 + signal.SIGXCPU
+    assert "Child terminated by signal" in result.stderr
