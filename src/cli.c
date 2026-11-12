@@ -13,7 +13,8 @@ void cli_print_help(const char *program_name) {
     printf("  %s --help\n", program_name);
     printf("  %s --version\n", program_name);
     printf(
-    "  %s run [--cpu seconds] [--timeout seconds] -- [command] [args...]\n",
+    "  %s run [--cpu seconds] [--timeout seconds] "
+    "[--memory MB] [--file-size MB] -- [command] [args...]\n",
     program_name
     );
 }
@@ -36,6 +37,24 @@ static int parse_cpu_limit(const char *value,
   return 0;
 }
 
+static int parse_ulong_limit(
+  const char *value,
+  unsigned long *result
+) {
+  char *end;
+  unsigned long parsed;
+
+  errno = 0;
+  parsed = strtoul(value, &end, 10);
+
+  if (errno != 0 || end == value || *end != '\0' || parsed == 0) {
+        return -1;
+  }
+
+  *result = parsed;
+  return 0;
+}
+
 int cli_parse(int argc, char *argv[], CliOptions *options) {
     if (options == NULL || argv == NULL) {
         return -1;
@@ -45,6 +64,7 @@ int cli_parse(int argc, char *argv[], CliOptions *options) {
     options->cpu_limit_seconds = 0;
     options->timeout_seconds = 0;
     options->memory_limit_mb = 0;
+    options->file_size_limit_mb = 0;
 
     if (argc < 2) {
         options->action = CLI_ACTION_HELP;
@@ -95,9 +115,43 @@ int cli_parse(int argc, char *argv[], CliOptions *options) {
           continue;
         }
 
+        if (strcmp(argv[index], "--memory") == 0) {
+            if (index + 1 >= argc) {
+              fprintf(stderr, "Missing value for --memory\n");
+              return -1;
+            }
+
+            if (parse_ulong_limit(argv[index + 1], &options->memory_limit_mb) !=
+                0) {
+              fprintf(stderr, "Invalid memory limit\n");
+              return -1;
+            }
+
+            index += 2;
+            continue;
+        }
+
+        if (strcmp(argv[index], "--file-size") == 0) {
+            if (index + 1 >= argc) {
+                fprintf(stderr, "Missing value for --file-size\n");
+                return -1;
+            }
+
+            if (parse_ulong_limit(
+                    argv[index + 1],
+                  &options->file_size_limit_mb
+                ) != 0) {
+                fprintf(stderr, "Invalid file size limit\n");
+                return -1;
+            }
+
+            index += 2;
+            continue;
+        }
         fprintf(stderr, "Unknown option: %s\n", argv[index]);
         return -1;
       }
+
 
       if (index >= argc || index + 1 >= argc) {
             fprintf(

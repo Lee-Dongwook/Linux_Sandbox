@@ -13,6 +13,7 @@ typedef struct {
   unsigned int cpu_limit_seconds;
   unsigned int timeout_seconds;
   unsigned long memory_limit_mb;
+  unsigned long file_size_limit_mb;
 } CliOptions;
 
 int cli_parse(int argc, char *argv[], CliOptions *options);

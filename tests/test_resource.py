@@ -52,3 +52,39 @@ print("allocation succeeded")
 
     assert result.returncode != 0
     assert "allocation succeeded" not in result.stdout
+
+
+def test_file_size_limit(tmp_path):
+    output_file = tmp_path / "large.bin"
+
+    result = subprocess.run(
+        [
+            str(SANDBOX),
+            "run",
+            "--file-size",
+            "1",
+            "--",
+            "python3",
+            "-c",
+            """
+with open("large.bin", "wb") as f:
+    f.write(b"x" * (2 * 1024 * 1024))
+""",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        timeout=5,
+    )
+
+    print("returncode:", result.returncode)
+    print("stdout:", result.stdout)
+    print("stderr:", result.stderr)
+    print("file exists:", output_file.exists())
+
+    if output_file.exists():
+        print("file size:", output_file.stat().st_size)
+
+    assert result.returncode != 0
+    assert output_file.exists()
+    assert output_file.stat().st_size <= 1024 * 1024

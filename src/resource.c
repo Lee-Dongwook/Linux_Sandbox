@@ -21,3 +21,23 @@ int resource_apply_memory_limit(unsigned long megabytes) {
 
   return setrlimit(RLIMIT_AS, &limit);
 }
+
+int resource_apply_file_size_limit(unsigned long megabytes)
+{
+  struct rlimit limit;
+
+  if (getrlimit(RLIMIT_FSIZE, &limit) == -1) {
+    return -1;
+  }
+
+  rlim_t bytes = (rlim_t)megabytes * 1024 * 1024;
+
+  if (limit.rlim_max != RLIM_INFINITY && bytes > limit.rlim_max) {
+      bytes = limit.rlim_max;
+  }
+
+  limit.rlim_cur = bytes;
+
+  return setrlimit(RLIMIT_FSIZE, &limit);
+}
+

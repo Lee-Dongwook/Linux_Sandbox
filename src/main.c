@@ -20,10 +20,10 @@ int main(int argc, char *argv[]) {
             return 0;
 
         case CLI_ACTION_RUN:
-          return process_execute(options.command_argv,
-                                 options.cpu_limit_seconds,
-                                 options.timeout_seconds,
-                                 options.memory_limit_mb);
+          return process_execute(
+              options.command_argv, options.cpu_limit_seconds,
+              options.timeout_seconds, options.memory_limit_mb,
+              options.file_size_limit_mb);
     }
 
   return 1;

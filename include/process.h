@@ -18,7 +18,7 @@ typedef struct {
 } ProcessResult;
 
 int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
-                    unsigned int timeout_seconds,
-                    unsigned long memory_limit_mb);
+                    unsigned int timeout_seconds, unsigned long memory_limit_mb,
+                    unsigned long file_size_limit_mb);
 
 #endif
