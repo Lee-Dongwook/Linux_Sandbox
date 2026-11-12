@@ -23,7 +23,7 @@ int main(int argc, char *argv[]) {
           return process_execute(
               options.command_argv, options.cpu_limit_seconds,
               options.timeout_seconds, options.memory_limit_mb,
-              options.file_size_limit_mb);
+              options.file_size_limit_mb, options.nofile_limit);
     }
 
   return 1;

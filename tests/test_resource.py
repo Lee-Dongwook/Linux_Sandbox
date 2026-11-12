@@ -88,3 +88,44 @@ with open("large.bin", "wb") as f:
     assert result.returncode != 0
     assert output_file.exists()
     assert output_file.stat().st_size <= 1024 * 1024
+
+
+def test_nofile_limit(tmp_path):
+    result = subprocess.run(
+        [
+            str(SANDBOX),
+            "run",
+            "--nofile",
+            "32",
+            "--",
+            "python3",
+            "-c",
+            """
+import errno
+
+files = []
+
+try:
+    while True:
+        files.append(open("/dev/null", "rb"))
+except OSError as error:
+    if error.errno != errno.EMFILE:
+        raise
+    print("file descriptor limit reached")
+finally:
+    for file in files:
+        file.close()
+""",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        timeout=5,
+    )
+
+    print("returncode:", result.returncode)
+    print("stdout:", repr(result.stdout))
+    print("stderr:", repr(result.stderr))
+
+    assert result.returncode == 0
+    assert "file descriptor limit reached" in result.stdout

@@ -88,7 +88,7 @@ static int read_exec_error(int error_fd, int *exec_error) {
 }
 
 int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
-                    unsigned int timeout_seconds, unsigned long memory_limit_mb, unsigned long file_size_limit_mb) {
+                    unsigned int timeout_seconds, unsigned long memory_limit_mb, unsigned long file_size_limit_mb, unsigned int nofile_limit) {
 
   if (command_argv == NULL || command_argv[0] == NULL) {
     fprintf(stderr, "Invalid command.\n");
@@ -139,6 +139,13 @@ int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
         perror("setrlimit(RLIMIT_FSIZE)");
         _exit(126);
       }
+    }
+
+    if (nofile_limit > 0) {
+        if (resource_apply_nofile_limit(nofile_limit) != 0) {
+            perror("setrlimit(RLIMIT_NOFILE)");
+            _exit(126);
+        }
     }
 
     if (cpu_limit_seconds > 0) {
