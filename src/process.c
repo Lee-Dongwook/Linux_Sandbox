@@ -5,11 +5,87 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <errno.h>
+#include <fcntl.h>
 
 #include "monitor.h"
 #include "process.h"
 #include "resource.h"
 #include "logger.h"
+
+static int create_exec_error_pipe(int pipe_fd[2]) {
+  if (pipe(pipe_fd) == -1) {
+    return -1;
+  }
+
+  int flags = fcntl(pipe_fd[1], F_GETFD);
+
+  if (flags == -1) {
+    close(pipe_fd[0]);
+    close(pipe_fd[1]);
+    return -1;
+  }
+
+  if (fcntl(pipe_fd[1], F_SETFD, flags | FD_CLOEXEC) == -1) {
+    close(pipe_fd[0]);
+    close(pipe_fd[1]);
+    return -1;
+  }
+
+  return 0;
+}
+
+static void report_exec_error(int error_fd, int error_number) {
+  const char *data = (const char *)&error_number;
+  size_t remaining = sizeof(error_number);
+
+  while (remaining > 0) {
+    ssize_t written = write(error_fd, data, remaining);
+
+    if (written == -1) {
+      if (errno == EINTR) {
+        continue;
+      }
+
+      break;
+    }
+
+    data += written;
+    remaining -= (size_t)written;
+  }
+
+  _exit(127);
+}
+
+static int read_exec_error(int error_fd, int *exec_error) {
+  size_t received = 0;
+
+  while (received < sizeof(*exec_error)) {
+    ssize_t count = read(error_fd, (char *)exec_error + received,
+                         sizeof(*exec_error) - received
+    );
+
+    if (count == 0) {
+      break;
+    }
+
+    if (count == -1) {
+      if (errno == EINTR) {
+        continue;
+      }
+
+      return -1;
+    }
+
+    received += (size_t)count;
+  }
+
+  if (received != 0 && received != sizeof(*exec_error)) {
+    errno = EIO;
+    return -1;
+  }
+
+  return received == sizeof(*exec_error) ? 1 : 0;
+}
 
 int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
                     unsigned int timeout_seconds) {
@@ -25,15 +101,26 @@ int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
     perror("clock_gettime");
     return -1;
   }
-  
+
+  int exec_error_pipe[2];
+
+  if (create_exec_error_pipe(exec_error_pipe) == -1) {
+    perror("create_exec_error_pipe");
+    return -1;
+  }
+
   pid_t child_pid = fork();
 
-  if (child_pid < 0) {
+  if (child_pid == -1) {
+    close(exec_error_pipe[0]);
+    close(exec_error_pipe[1]);
     perror("fork");
     return -1;
   }
 
   if (child_pid == 0) {
+
+    close(exec_error_pipe[0]);
 
     if (setpgid(0, 0) == -1) {
       perror("setpgid");
@@ -48,9 +135,11 @@ int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
     }
     execvp(command_argv[0], command_argv);
 
-    perror("execvp");
-    _exit(127);
+    int exec_error = errno;
+    report_exec_error(exec_error_pipe[1], exec_error);
   }
+
+  close(exec_error_pipe[1]);
 
   int status;
 
@@ -58,8 +147,24 @@ int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
       monitor_wait_for_process(child_pid, timeout_seconds, &status);
 
   if (monitor_result == -1) {
+    close(exec_error_pipe[0]);
     perror("monitor_wait_for_process");
     return -1;
+  }
+
+  int exec_error = 0;
+  int exec_error_result = read_exec_error(exec_error_pipe[0], &exec_error);
+
+  close(exec_error_pipe[0]);
+
+  if (exec_error_result == -1) {
+        perror("read_exec_error");
+        return -1;
+  }
+
+  if (exec_error_result == 1) {
+        errno = exec_error;
+        perror("execvp");
   }
 
   int timed_out = (monitor_result == 1);
@@ -99,3 +204,4 @@ int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
 
   return exit_code;
 }
+
