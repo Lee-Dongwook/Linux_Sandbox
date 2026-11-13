@@ -1,4 +1,7 @@
 #include <sys/resource.h>
+#ifdef __linux__
+#include <sys/prctl.h>
+#endif
 
 #include "resource.h"
 
@@ -60,3 +63,21 @@ int resource_apply_nofile_limit(unsigned int max_files)
 
     return setrlimit(RLIMIT_NOFILE, &limit);
 }
+
+int resource_disable_core_dump(void) {
+  struct rlimit limit;
+
+  limit.rlim_cur = 0;
+  limit.rlim_max = 0;
+
+  return setrlimit(RLIMIT_CORE, &limit);
+}
+
+int resource_apply_no_new_privs(void)
+{
+#ifdef __linux__
+  return prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0);
+#else
+    return 0;
+#endif
+} 

@@ -191,6 +191,17 @@ int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
             _exit(126);
         }
     }
+
+    if (resource_disable_core_dump() != 0) {
+      perror("resource_disable_core_dump");
+      _exit(126);
+    }
+
+    if (resource_apply_no_new_privs() != 0) {
+      perror("resource_apply_no_new_privs");
+      _exit(126);
+    }
+
     execvp(command_argv[0], command_argv);
 
     int exec_error = errno;
