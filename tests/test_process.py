@@ -76,3 +76,47 @@ def test_program_exit_127_is_not_exec_error(tmp_path):
 
     assert result.returncode == 127
     assert "execvp" not in result.stderr
+
+def test_custom_working_directory(tmp_path):
+    working_dir = tmp_path / "workspace"
+    working_dir.mkdir()
+
+    result = subprocess.run(
+        [
+            str(SANDBOX),
+            "run",
+            "--cwd",
+            str(working_dir),
+            "--",
+            "python3",
+            "-c",
+            "import os; print(os.getcwd())",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout.strip() == str(working_dir)
+
+def test_invalid_working_directory(tmp_path):
+    result = subprocess.run(
+        [
+            str(SANDBOX),
+            "run",
+            "--cwd",
+            str(tmp_path / "nonexistent"),
+            "--",
+            "python3",
+            "-c",
+            "print('should not execute')",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=5,
+    )
+
+    assert result.returncode == 126
+    assert "chdir" in result.stderr
+    assert "should not execute" not in result.stdout

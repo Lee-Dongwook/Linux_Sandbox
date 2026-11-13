@@ -14,7 +14,7 @@ void cli_print_help(const char *program_name) {
     printf("  %s --version\n", program_name);
     printf(
     "  %s run [--cpu seconds] [--timeout seconds] "
-    "[--memory MB] [--file-size MB] [--nofile count] -- [command] [args...]\n",
+    "[--memory MB] [--file-size MB] [--nofile count] -- [command] [args...] [--cwd directory]\n",
     program_name
     );
 }
@@ -66,6 +66,7 @@ int cli_parse(int argc, char *argv[], CliOptions *options) {
     options->memory_limit_mb = 0;
     options->file_size_limit_mb = 0;
     options->nofile_limit = 0;
+    options->working_directory = NULL;
 
     if (argc < 2) {
         options->action = CLI_ACTION_HELP;
@@ -160,6 +161,18 @@ int cli_parse(int argc, char *argv[], CliOptions *options) {
             fprintf(stderr, "Invalid file descriptor limit\n");
             return -1;
           }
+
+          index += 2;
+          continue;
+        }
+
+        if(strcmp(argv[index], "--cwd") == 0) {
+          if (index + 1 >= argc || strcmp(argv[index + 1], "--") == 0) {
+            fprintf(stderr, "Missing value for --cwd\n");
+            return -1;
+          }
+
+          options->working_directory = argv[index + 1];
 
           index += 2;
           continue;

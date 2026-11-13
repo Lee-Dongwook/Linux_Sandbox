@@ -120,7 +120,7 @@ static int close_inherited_fds(int keep_fd)
 }
 
 int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
-                    unsigned int timeout_seconds, unsigned long memory_limit_mb, unsigned long file_size_limit_mb, unsigned int nofile_limit) {
+                    unsigned int timeout_seconds, unsigned long memory_limit_mb, unsigned long file_size_limit_mb, unsigned int nofile_limit, const char *working_directory) {
 
   if (command_argv == NULL || command_argv[0] == NULL) {
     fprintf(stderr, "Invalid command.\n");
@@ -200,6 +200,13 @@ int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
     if (resource_apply_no_new_privs() != 0) {
       perror("resource_apply_no_new_privs");
       _exit(126);
+    }
+
+    if (working_directory != NULL) {
+      if (chdir(working_directory) != 0) {
+          perror("chdir");
+          _exit(126);
+      }
     }
 
     execvp(command_argv[0], command_argv);

@@ -15,6 +15,7 @@ typedef struct {
   unsigned long memory_limit_mb;
   unsigned long file_size_limit_mb;
   unsigned int nofile_limit;
+  char *working_directory;
 } CliOptions;
 
 int cli_parse(int argc, char *argv[], CliOptions *options);
