@@ -1,6 +1,7 @@
-
+import os
 import subprocess
 import time
+import signal
 from pathlib import Path
 
 
@@ -62,3 +63,46 @@ def test_timeout_kills_child_process_group(tmp_path):
     )
 
     assert check.returncode == 1
+
+def test_timeout_kills_entire_process_group(tmp_path):
+    result = subprocess.run(
+        [
+            str(SANDBOX),
+            "run",
+            "--timeout",
+            "2",
+            "--",
+            "python3",
+            "-c",
+            """
+import subprocess
+import time
+
+child_a = subprocess.Popen(["sleep", "100"])
+child_b = subprocess.Popen(["sleep", "100"])
+
+print(child_a.pid, child_b.pid, flush=True)
+
+while True:
+    time.sleep(1)
+""",
+        ],
+        capture_output=True,
+        text=True,
+        cwd=tmp_path,
+        timeout=5,
+    )
+
+    assert result.returncode == 124
+    assert "Execution timed out." in result.stderr
+
+    pids = [int(pid) for pid in result.stdout.split()]
+    assert len(pids) == 2
+
+    for pid in pids:
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            continue
+
+        raise AssertionError(f"Child Process {pid} is still alive")
