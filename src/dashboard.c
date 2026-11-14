@@ -12,6 +12,8 @@ static ResourceSnapshot processes[DASHBOARD_MAX_PROCESSES];
 static size_t process_count = 0;
 static int selected_index = 0;
 static DashboardSortMode sort_mode = SORT_BY_CPU;
+static int compare_cpu(const void *a, const void *b);
+static int compare_memory(const void *a, const void *b);
 
 void dashboard_set_processes(const ResourceSnapshot *snapshots, size_t count) {
   if (snapshots == NULL) {
@@ -34,6 +36,14 @@ void dashboard_set_processes(const ResourceSnapshot *snapshots, size_t count) {
     selected_index = 0;
   } else if (selected_index >= (int)process_count) {
     selected_index = (int)process_count -1;
+  }
+
+  if (sort_mode == SORT_BY_CPU) {
+    qsort(processes, process_count,
+          sizeof(ResourceSnapshot), compare_cpu
+    );
+  } else {
+    qsort(processes, process_count, sizeof(ResourceSnapshot), compare_memory);
   }
 }
 
@@ -77,7 +87,21 @@ static void render_summary(void) {
     unsigned int running = 0;
     unsigned int total_threads = 0;
 
+    for (size_t i = 0; i < process_count; i++) {
+      if (processes[i].state == 'R') {
+            running++;
+      }
+
+       total_threads += processes[i].threads;
+    }
+
     mvprintw(3, 2, "SYSTEM SUMMARY");
+
+    mvprintw(
+        5, 5,
+        "Processes: %zu",
+        process_count
+    );
 
     mvprintw(
         5, 30,
