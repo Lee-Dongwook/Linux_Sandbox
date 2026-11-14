@@ -298,3 +298,8 @@ make clean
 make
 pytest tests/ -v
 ```
+
+### 8. LICENSE
+
+MIT
+See the [LICENSE](LICENSE) file for details.
