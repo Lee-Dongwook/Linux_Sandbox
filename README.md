@@ -256,3 +256,45 @@ Known limitations include:
 - The execution environment still operates under the invoking user's permissions
 
 **Do not use the current implementation to execute untrusted production workloads.**
+
+## 7. Docker Development Setup
+
+Docker provides a consistent Ubuntu 24.04 environment without requiring a separater Linux installation on the host machine.
+
+### Build Docker Image
+
+```bash
+docker compose build
+```
+
+This builds the developement image using the Ubuntu 24.04 base image and installs the required development tools.
+
+### Start Development Container
+
+```bash
+docker compose run --rm mini-sandbox
+```
+
+The project root is mounted at `/workspace` inside the container.
+
+Changes made on the host machine are immediately reflected inside the container.
+
+### Verify Environment
+
+```bash
+cat /etc/os-release
+
+gcc --version
+make --version
+python --version
+pytest --version
+strace --version
+```
+
+### Build & Testing
+
+```bash
+make clean
+make
+pytest tests/ -v
+```
