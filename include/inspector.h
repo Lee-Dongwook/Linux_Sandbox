@@ -13,8 +13,15 @@ typedef struct {
   unsigned int threads;
 } ProcessSnapshot;
 
+typedef struct {
+    pid_t pid;
+    unsigned long long utime_ticks;
+    unsigned long long stime_ticks;
+} ProcessCpuTimes;
+
 int inspector_read_process(pid_t pid, ProcessSnapshot *snapshot);
-int inspector_collect_processes(ProcessSnapshot *snapshots, size_t capacity, size_t *count
-);
+int inspector_collect_processes(ProcessSnapshot *snapshots, size_t capacity,
+                                size_t *count);
+int inspector_read_cpu_times(pid_t pid, ProcessCpuTimes *cpu_times);
 
 #endif

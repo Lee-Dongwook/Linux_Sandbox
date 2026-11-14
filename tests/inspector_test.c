@@ -39,5 +39,34 @@ int main(void) {
             snapshots[i].vm_rss_kb
         );
     }
+
+    long clock_ticks = sysconf(_SC_CLK_TCK);
+
+    if (clock_ticks == -1) {
+        perror("sysconf");
+        return 1;
+    }
+
+    volatile unsigned long long counter = 0;
+
+    for (unsigned long long i = 0; i < 500000000ULL; i++) {
+        counter += i;
+    }
+
+    printf("Counter: %llu\n", counter);
+
+    ProcessCpuTimes cpu_times;
+
+    if (inspector_read_cpu_times(getpid(), &cpu_times) == -1) {
+        perror("inspector_read_cpu_times");
+        return 1;
+    }
+
+    printf("\nCPU Times:\n");
+    printf("PID: %d\n", cpu_times.pid);
+    printf("User CPU Time: %llu ticks\n", cpu_times.utime_ticks);
+    printf("System CPU Time: %llu ticks\n", cpu_times.stime_ticks);
+    printf("Total CPU Time: %llu ticks\n",
+           cpu_times.utime_ticks + cpu_times.stime_ticks);
     return 0;
 }
