@@ -5,6 +5,7 @@
 
 #include "dashboard.h"
 #include "resource_monitor.h"
+#include "system_monitor.h"
 
 #define DASHBOARD_MAX_PROCESSES 256
 #define CPU_HISTORY_LENGTH 60
@@ -19,6 +20,8 @@ static double cpu_history[CPU_HISTORY_LENGTH];
 static size_t cpu_history_count = 0;
 static size_t cpu_history_next = 0;
 static pid_t cpu_history_pid = -1;
+static SystemMetrics system_metrics;
+static int has_system_metrics = 0;
 
 static void reset_cpu_history(pid_t pid) {
   cpu_history_count = 0;
@@ -49,6 +52,16 @@ static void record_cpu_history(void) {
   if (cpu_history_count < CPU_HISTORY_LENGTH) {
       cpu_history_count++;
   }
+}
+
+void dashboard_set_system_metrics(const SystemMetrics *metrics) {
+  if (metrics == NULL) {
+    has_system_metrics = 0;
+    return;
+  }
+
+  system_metrics = *metrics;
+  has_system_metrics = 1;
 }
 
 void dashboard_set_processes(const ResourceSnapshot *snapshots, size_t count) {
@@ -152,6 +165,44 @@ static void render_summary(void) {
         total_threads
     );
     mvhline(7, 0, ACS_HLINE, COLS);
+}
+
+static void render_system_summary(void) {
+   mvprintw(8, 2, "SYSTEM METRICS");
+
+    if (!has_system_metrics) {
+        mvprintw(10, 5, "Waiting for system metrics...");
+        return;
+    }
+
+    mvprintw(
+        10, 5,
+        "CPU Usage: %.2f%% | Logical CPUs: %u",
+        system_metrics.cpu_usage,
+        system_metrics.cpu_count
+    );
+
+    mvprintw(
+        11, 5,
+        "Memory Usage: %.2f%% | Used: %lu KB | Available: %lu KB",
+        system_metrics.memory_usage,
+        system_metrics.memory_used_kb,
+        system_metrics.memory_available_kb
+    );
+
+    mvprintw(
+        12, 5,
+        "Load Average: %.2f / %.2f / %.2f",
+        system_metrics.load_average_1,
+        system_metrics.load_average_5,
+        system_metrics.load_average_15
+    );
+
+    mvprintw(
+        13, 5,
+        "Uptime: %lu seconds",
+        system_metrics.uptime_seconds
+    );
 }
 
 static void render_bar(int row, int col, double value, double max_value,
@@ -346,6 +397,10 @@ void dashboard_render(void) {
 
     render_header();
     render_summary();
+    render_system_summary();
+
+    mvhline(15, 0, ACS_HLINE, COLS);
+
     render_cpu_history();
     render_process_table();
     render_footer();

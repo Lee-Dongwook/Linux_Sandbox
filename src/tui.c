@@ -5,6 +5,8 @@
 #include "tui.h"
 #include "dashboard.h"
 #include "resource_monitor.h"
+#include "system_inspector.h"
+#include "system_monitor.h"
 
 #define MONITOR_MAX_PROCESSES 256
 
@@ -30,16 +32,34 @@ int tui_run(void) {
 
     ResourceSnapshot previous[MONITOR_MAX_PROCESSES];
     ResourceSnapshot current[MONITOR_MAX_PROCESSES];
+    SystemSnapshot previous_system;
+    SystemSnapshot current_system;
+    SystemMetrics system_metrics;
 
     size_t previous_count = 0;
     size_t current_count = 0;
+
+    int has_previous_system = 0;
 
     long clock_ticks = sysconf(_SC_CLK_TCK);
 
     int running = 1;
 
     while (running) {
-        current_count = 0;
+      current_count = 0;
+
+      if (system_inspector_collect(&current_system) == 0) {
+        const SystemSnapshot *previous_ptr =
+            has_previous_system ? &previous_system : NULL;
+
+        if (system_monitor_calculate(previous_ptr, &current_system,
+                                     &system_metrics) == 0) {
+          dashboard_set_system_metrics(&system_metrics);
+
+          previous_system = current_system;
+          has_previous_system = 1;
+        }
+      }
 
         int status = resource_monitor_collect_all(
             current, MONITOR_MAX_PROCESSES, &current_count);
