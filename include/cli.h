@@ -4,6 +4,7 @@
 typedef enum {
   CLI_ACTION_HELP,
   CLI_ACTION_VERSION,
+  CLI_ACTION_TUI,
   CLI_ACTION_RUN,
 } CliAction;
 

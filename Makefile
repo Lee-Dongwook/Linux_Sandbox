@@ -9,13 +9,14 @@ SRCS = $(wildcard $(SRC_DIR)/*.c)
 HEADERS = $(wildcard $(INC_DIR)/*.h)
 
 CFLAGS = -Wall -Wextra -Werror -std=c11 -I$(INC_DIR)
+LDLIBS = -lncurses
 
 .PHONY: all clean run
 
 all: $(TARGET)
 
 $(TARGET): $(SRCS) $(HEADERS)
-	$(CC) $(CFLAGS) $(SRCS) -o $(TARGET)
+	$(CC) $(CFLAGS) $(SRCS) -o $(TARGET) $(LDLIBS)
 
 run: $(TARGET)
 	./$(TARGET)
