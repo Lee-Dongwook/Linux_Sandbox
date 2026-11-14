@@ -1,4 +1,10 @@
+#define _GNU_SOURCE
 #define _POSIX_C_SOURCE 200809L
+
+#include <limits.h>
+#ifdef __linux__
+#include <sys/syscall.h>
+#endif
 
 #include <time.h>
 #include <stdio.h>
@@ -109,6 +115,24 @@ static int close_inherited_fds(int keep_fd)
 
         max_fd = (rlim_t)open_max;
     }
+#ifdef __linux__
+#ifdef SYS_close_range
+
+    int close_range_result = 0;
+
+    if (keep_fd > 3) {
+      if (syscall(SYS_close_range, 3U, (unsigned int)keep_fd - 1U, 0U) == -1) {
+          close_range_result = -1;
+      }
+    }
+
+    if (close_range_result == 0) {
+      if (syscall(SYS_close_range, (unsigned int)keep_fd + 1U, UINT_MAX, 0U) == 0) {
+        return 0;
+      }
+    }
+#endif
+#endif
 
     for (rlim_t fd = 3; fd < max_fd; fd++) {
         if ((int)fd == keep_fd) {
