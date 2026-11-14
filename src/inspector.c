@@ -2,6 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
+#include <dirent.h>
+#include <ctype.h>
+#include <limits.h>
 
 #include "inspector.h"
 
@@ -78,4 +81,57 @@ int inspector_read_process(pid_t pid, ProcessSnapshot *snapshot) {
   *snapshot = result;
 
   return 0;
+}
+
+int inspector_collect_processes(
+    ProcessSnapshot *snapshots,
+    size_t capacity,
+    size_t *count
+) {
+    if (snapshots == NULL || count == NULL || capacity == 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    *count = 0;
+
+    DIR *proc_dir = opendir("/proc");
+
+    if (proc_dir == NULL) {
+        return -1;
+    }
+
+    struct dirent *entry;
+
+    while ((entry = readdir(proc_dir)) != NULL) {
+        if (!isdigit((unsigned char)entry->d_name[0])) {
+            continue;
+        }
+
+        char *end;
+        long pid_value = strtol(entry->d_name, &end, 10);
+
+        if (*end != '\0' || pid_value <= 0 || pid_value > INT_MAX) {
+            continue;
+        }
+
+        if (*count >= capacity) {
+            break;
+        }
+
+        ProcessSnapshot snapshot;
+
+        if (inspector_read_process((pid_t)pid_value, &snapshot) == -1) {
+            continue;
+        }
+
+        snapshots[*count] = snapshot;
+        (*count)++;
+    }
+
+    int saved_errno = errno;
+    closedir(proc_dir);
+
+    errno = saved_errno;
+    return 0;
 }
