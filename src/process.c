@@ -146,7 +146,19 @@ static int close_inherited_fds(int keep_fd)
 }
 
 int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
-                    unsigned int timeout_seconds, unsigned long memory_limit_mb, unsigned long file_size_limit_mb, unsigned int nofile_limit, const char *working_directory) {
+                    unsigned int timeout_seconds, unsigned long memory_limit_mb,
+                    unsigned long file_size_limit_mb, unsigned int nofile_limit,
+                    const char *working_directory, ProcessResult *result) {
+
+  if (result == NULL) {
+    errno = EINVAL;
+    return -1;
+  }
+
+  result->exit_code = -1;
+  result->signal_number = 0;
+  result->exec_errno = 0;
+  result->termination_reason = PROCESS_TERMINATION_EXIT;
 
   if (command_argv == NULL || command_argv[0] == NULL) {
     fprintf(stderr, "Invalid command.\n");
@@ -264,28 +276,38 @@ int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
         return -1;
   }
 
-  if (exec_error_result == 1) {
-        errno = exec_error;
-        perror("execvp");
-  }
-
   int timed_out = (monitor_result == 1);
   int exit_code;
 
   if (timed_out) {
     fprintf(stderr, "Execution timed out.\n");
+
+    result->termination_reason = PROCESS_TERMINATION_TIMEOUT;
     exit_code = 124;
+
   } else if (WIFEXITED(status)) {
+
     exit_code = WEXITSTATUS(status);
+
+    if (exec_error_result == 1) {
+      result->termination_reason = PROCESS_TERMINATION_EXEC_ERROR;
+      result->exec_errno = exec_error;
+    } else {
+      result->termination_reason = PROCESS_TERMINATION_EXIT;
+    }
   } else if (WIFSIGNALED(status)) {
-    int signal_number = WTERMSIG(status);
+    result->termination_reason = PROCESS_TERMINATION_SIGNAL;
+    result->signal_number = WTERMSIG(status);
 
-    fprintf(stderr, "Child terminated by signal: %d\n", signal_number);
+    fprintf(stderr, "Child terminated by signal: %d\n", result->signal_number);
 
-    exit_code = 128 + signal_number;
+    exit_code = 128 + result->signal_number;
   } else {
+    errno = ECHILD;
     exit_code = 1;
   }
+
+  result->exit_code = exit_code;
 
   struct timespec end_time;
 
@@ -304,6 +326,6 @@ int process_execute(char *const command_argv[], unsigned int cpu_limit_seconds,
     perror("logger_log_execution");
   }
 
-  return exit_code;
+  return 0;
 }
 
