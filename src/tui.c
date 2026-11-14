@@ -32,7 +32,10 @@ int tui_run(void) {
 
         if (key == 'q' || key == 'Q') {
             running = 0;
+            continue;
         }
+
+        dashboard_handle_input(key);
     }
 
     endwin();
