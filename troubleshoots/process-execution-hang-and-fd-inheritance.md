@@ -193,12 +193,12 @@ Note that libc functions do not necessarily map one-to-one to Linux syscall name
 
 Further improvements worth considering:
 
-- Use pipe2(O_CLOEXEC) on Linux to create close-on-exec descriptors atomically.
+- Use `pipe2(O_CLOEXEC)` on Linux to create close-on-exec descriptors atomically.
 
-- Handle close() errors where meaningful.
+- Handle `close()` errors where meaningful.
 
-- Ensure child setup failures are reported through the same error channel, not only execvp() failures.
+- Ensure child setup failures are reported through the same error channel, not only `execvp()` failures.
 
 - Add integration tests for successful execution, invalid executable paths, and child setup failures.
 
-- Consider descriptor-closing strategies that avoid iterating over a potentially large RLIMIT_NOFILE range.
+- Consider descriptor-closing strategies that avoid iterating over a potentially large `RLIMIT_NOFILE` range.
