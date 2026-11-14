@@ -116,18 +116,52 @@ static void render_summary(void) {
     mvhline(7, 0, ACS_HLINE, COLS);
 }
 
+static void render_bar(int row, int col, double value, double max_value,
+                       int width) {
+  if (max_value <= 0 || width <= 0) {
+    return;
+  }
+
+  if (value < 0) {
+    value = 0;
+  }
+
+  if (value > max_value) {
+    value = max_value;
+  }
+
+  int filled = (int)((value / max_value) * width);
+
+  for (int i = 0; i < width; i++) {
+    mvaddch(row, col + i, i < filled ? '#' : '-');
+  }
+}
+
 static void render_process_table(void) {
     const int header_row = 11;
     const int first_data_row = 13;
     const int available_rows = LINES - first_data_row - 3;
 
+    const int cpu_bar_width = 20;
+    const int memory_bar_width = 20;
+
+    unsigned long max_rss = 0;
+
     mvprintw(9, 2, "PROCESS MONITOR");
 
-    mvprintw(
-        header_row, 2,
-        "%-8s %-8s %10s %12s %12s %8s",
-        "PID", "STATE", "CPU%", "RSS(KB)", "VIRT(KB)", "THREADS"
-    );
+    for (size_t i = 0; i < process_count; i++) {
+      if (processes[i].vm_rss_kb > max_rss) {
+        max_rss = processes[i].vm_rss_kb;
+      }
+    }
+
+    mvprintw(header_row, 2, "PID");
+    mvprintw(header_row, 11, "STATE");
+    mvprintw(header_row, 20, "CPU%%");
+    mvprintw(header_row, 30, "CPU USAGE");
+    mvprintw(header_row, 54, "RSS(KB)");
+    mvprintw(header_row, 68, "MEMORY USAGE");
+    mvprintw(header_row, 93, "THREADS");
 
     mvhline(12, 2, ACS_HLINE, COLS - 4);
 
@@ -148,10 +182,25 @@ static void render_process_table(void) {
         attron(A_REVERSE);
       }
 
-      mvprintw(row, 2, "%-8d %-8c %9.2f%% %12lu %12lu %8u", processes[i].pid,
-               processes[i].state, processes[i].cpu_usage,
-               processes[i].vm_rss_kb, processes[i].vm_size_kb,
-               processes[i].threads);
+      mvprintw(row, 2, "%-8d", processes[i].pid);
+      mvprintw(row, 11, "%-8c", processes[i].state);
+      mvprintw(row, 20, "%7.2f%%", processes[i].cpu_usage);
+      render_bar(
+            row,
+            30,
+            processes[i].cpu_usage,
+            100.0,
+            cpu_bar_width
+        );
+      mvprintw(row, 54, "%-10lu", processes[i].vm_rss_kb);
+      render_bar(
+            row,
+            68,
+            (double)processes[i].vm_rss_kb,
+            (double)max_rss,
+            memory_bar_width
+        );
+      mvprintw(row, 93, "%-8u", processes[i].threads);
 
       if ((int)i == selected_index) {
         attroff(A_REVERSE);
