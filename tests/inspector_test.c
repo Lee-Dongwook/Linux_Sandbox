@@ -58,12 +58,6 @@ int main(void) {
         return 1;
     }
 
-    volatile unsigned long long counter = 0;
-
-    for (unsigned long long i = 0; i < 500000000ULL; i++) {
-        counter += i;
-    }
-
     if (resource_monitor_take_cpu_sample(getpid(), &current) == -1) {
         perror("resource_monitor_take_cpu_sample");
         return 1;
@@ -80,18 +74,6 @@ int main(void) {
         perror("resource_monitor_calculate_cpu_usage");
         return 1;   
     }
-    
-    printf("\nCPU Monitoring Result:\n");
-    printf("PID: %d\n", current.pid);
-    printf("Previous CPU Ticks: %llu\n", previous.total_cpu_ticks);
-    printf("Current CPU Ticks: %llu\n", current.total_cpu_ticks);
-    printf(
-        "Delta CPU Ticks: %llu\n",
-        current.total_cpu_ticks - previous.total_cpu_ticks
-    );
-    printf("CPU Usage: %.2f%%\n", cpu_usage);
-    printf("Counter: %llu\n", counter);
-
 
     ResourceSnapshot resource_snapshot;
 
@@ -138,5 +120,96 @@ if (resource_monitor_collect(
             all_snapshots[i].cpu_ticks
         );
     }
+
+    ResourceSnapshot previous_snapshots[1024];
+    ResourceSnapshot current_snapshots[1024];
+
+    size_t previous_count = 0;
+    size_t current_count = 0;
+
+    if (resource_monitor_collect_all(
+        previous_snapshots,
+        1024,
+        &previous_count
+    ) == -1) {
+        perror("resource_monitor_collect_all");
+        return 1;
+    }
+
+    volatile unsigned long long counter = 0;
+
+    for (unsigned long long i = 0; i < 500000000ULL; i++) {
+        counter += i;
+    }
+
+    if (resource_monitor_collect_all(
+        current_snapshots,
+        1024,
+        &current_count
+        ) == -1) {
+        perror("resource_monitor_collect_all");
+        return 1;
+    }
+
+    printf("\nCPU Sampling Debug:\n");
+
+    for (size_t i = 0; i < current_count; i++) {
+        for (size_t j = 0; j < previous_count; j++) {
+            if (current_snapshots[i].pid != previous_snapshots[j].pid) {
+                continue;
+            }
+
+            printf("PID: %d\n", current_snapshots[i].pid);
+
+            printf(
+                "Previous Ticks: %llu\n",
+                previous_snapshots[j].cpu_ticks
+            );
+
+            printf(
+                "Current Ticks: %llu\n",
+                current_snapshots[i].cpu_ticks
+            );
+
+            printf(
+                "Previous Timestamp: %ld.%09ld\n",
+                previous_snapshots[j].timestamp.tv_sec,
+                previous_snapshots[j].timestamp.tv_nsec
+            );
+
+            printf(
+                "Current Timestamp: %ld.%09ld\n",
+                current_snapshots[i].timestamp.tv_sec,
+                current_snapshots[i].timestamp.tv_nsec
+            );
+
+            break;
+        }
+    }
+
+    if (resource_monitor_update_cpu_usage(
+        previous_snapshots,
+        previous_count,
+        current_snapshots,
+        current_count,
+        clock_ticks
+    ) == -1) {
+        perror("resource_monitor_update_cpu_usage");
+        return 1;
+    }
+
+    printf("\nPeriodic Resource Monitoring:\n");
+
+    for (size_t i = 0; i < current_count; i++) {
+        printf(
+            "PID: %d | RSS: %lu kB | CPU: %.2f%%\n",
+            current_snapshots[i].pid,
+            current_snapshots[i].vm_rss_kb,
+            current_snapshots[i].cpu_usage
+        );
+    }
+
+    printf("Counter: %llu\n", counter);
+
     return 0;
 }

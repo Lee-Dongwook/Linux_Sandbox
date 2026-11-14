@@ -20,6 +20,7 @@ typedef struct {
     unsigned int threads;
     unsigned long long cpu_ticks;
     double cpu_usage;
+    struct timespec timestamp;
 } ResourceSnapshot;
 
 int resource_monitor_take_cpu_sample(
@@ -40,6 +41,14 @@ int resource_monitor_collect_all(
     ResourceSnapshot *snapshots,
     size_t capacity,
     size_t *count
+);
+
+int resource_monitor_update_cpu_usage(
+    const ResourceSnapshot *previous,
+    size_t previous_count,
+    ResourceSnapshot *current,
+    size_t current_count,
+    long clock_ticks
 );
 
 #endif

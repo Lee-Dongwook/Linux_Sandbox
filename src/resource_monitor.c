@@ -1,5 +1,6 @@
 #define _POSIX_C_SOURCE 200809L
 
+#include <time.h>
 #include <errno.h>
 #include <unistd.h>
 #include <string.h>
@@ -101,6 +102,12 @@ int resource_monitor_collect(
         return -1;
     }
 
+    struct timespec timestamp;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &timestamp) == -1) {
+      return -1;
+    }
+
     ResourceSnapshot result = {
         .pid = process_snapshot.pid,
         .state = process_snapshot.state,
@@ -108,7 +115,8 @@ int resource_monitor_collect(
         .vm_size_kb = process_snapshot.vm_size_kb,
         .threads = process_snapshot.threads,
         .cpu_ticks = cpu_times.utime_ticks + cpu_times.stime_ticks,
-        .cpu_usage = 0.0
+        .cpu_usage = 0.0,
+        .timestamp = timestamp
     };
 
     *snapshot = result;
@@ -163,6 +171,59 @@ int resource_monitor_collect_all(
     }
 
     free(processes);
+
+    return 0;
+}
+
+int resource_monitor_update_cpu_usage(
+    const ResourceSnapshot *previous,
+    size_t previous_count,
+    ResourceSnapshot *current,
+    size_t current_count,
+    long clock_ticks
+) {
+    if ((previous_count > 0 && previous == NULL) ||
+        (current_count > 0 && current == NULL) ||
+        clock_ticks <= 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    for (size_t i = 0; i < current_count; i++) {
+        current[i].cpu_usage = 0.0;
+
+        for (size_t j = 0; j < previous_count; j++) {
+            if (current[i].pid != previous[j].pid) {
+                continue;
+            }
+
+            CpuSample previous_sample = {
+                .pid = previous[j].pid,
+                .total_cpu_ticks = previous[j].cpu_ticks,
+                .timestamp = previous[j].timestamp
+            };
+
+            CpuSample current_sample = {
+                .pid = current[i].pid,
+                .total_cpu_ticks = current[i].cpu_ticks,
+                .timestamp = current[i].timestamp
+            };
+
+            double cpu_usage;
+
+            if (resource_monitor_calculate_cpu_usage(
+                    &previous_sample,
+                    &current_sample,
+                    clock_ticks,
+                    &cpu_usage
+                ) == -1) {
+                return -1;
+            }
+
+            current[i].cpu_usage = cpu_usage;
+            break;
+        }
+    }
 
     return 0;
 }
