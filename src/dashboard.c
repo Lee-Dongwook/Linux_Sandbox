@@ -227,9 +227,9 @@ static void render_bar(int row, int col, double value, double max_value,
 }
 
 static void render_cpu_history(void) {
-  const int chart_top = 11;
-  const int chart_bottom = 17;
-  const int chart_left = 8;
+  const int chart_top = 18;
+  const int chart_bottom = 24;
+  const int chart_left = 10;
 
   int chart_width = COLS - chart_left - 2;
 
@@ -242,23 +242,23 @@ static void render_cpu_history(void) {
   }
 
   if (cpu_history_count == 0) {
-        mvprintw(9, 2, "CPU HISTORY - Waiting for samples");
+        mvprintw(16, 2, "CPU HISTORY - PID: %d (Last 60 Samples)", cpu_history_pid);
         return;
   }
 
   mvprintw(
-        9, 2,
+        16, 2,
         "CPU HISTORY - PID: %d (Last 60 Samples)",
         cpu_history_pid
   );
 
   mvprintw(chart_top, 2, "100%%");
-  mvprintw(14, 2, " 50%%");
-  mvprintw(chart_bottom, 2, "  0%%");
+  mvprintw((chart_top + chart_bottom) / 2, 2, "50%%");
+  mvprintw(chart_bottom, 2, "0%%");
 
   for (int x = chart_left; x < chart_left + chart_width; x++) {
     mvaddch(chart_top, x, ACS_HLINE);
-    mvaddch(14, x, ACS_HLINE);
+    mvaddch((chart_top + chart_bottom) / 2, x, ACS_HLINE);
     mvaddch(chart_bottom, x, ACS_HLINE);
   }
 
@@ -309,8 +309,8 @@ static void render_cpu_history(void) {
 }
 
 static void render_process_table(void) {
-    const int header_row = 21;
-    const int first_data_row = 23;
+    const int header_row = 29;
+    const int first_data_row = 31;
     const int available_rows = LINES - first_data_row - 3;
 
     const int cpu_bar_width = 20;
@@ -318,7 +318,7 @@ static void render_process_table(void) {
 
     unsigned long max_rss = 0;
 
-    mvprintw(19, 2, "PROCESS MONITOR");
+    mvprintw(27, 2, "PROCESS MONITOR");
 
     for (size_t i = 0; i < process_count; i++) {
       if (processes[i].vm_rss_kb > max_rss) {
@@ -334,7 +334,7 @@ static void render_process_table(void) {
     mvprintw(header_row, 68, "MEMORY USAGE");
     mvprintw(header_row, 93, "THREADS");
 
-    mvhline(22, 2, ACS_HLINE, COLS - 4);
+    mvhline(30, 2, ACS_HLINE, COLS - 4);
 
     if (available_rows <= 0) {
         return;
@@ -402,6 +402,9 @@ void dashboard_render(void) {
     mvhline(15, 0, ACS_HLINE, COLS);
 
     render_cpu_history();
+
+    mvhline(25, 0, ACS_HLINE, COLS);
+
     render_process_table();
     render_footer();
 
@@ -409,7 +412,7 @@ void dashboard_render(void) {
 }
 
 void dashboard_handle_input(int key) {
-  int max_visible = LINES - 23 - 3;
+  int max_visible = LINES - 31 - 3;
 
   if (key == KEY_UP && selected_index > 0) {
         selected_index--;
