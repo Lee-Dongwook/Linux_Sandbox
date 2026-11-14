@@ -1,0 +1,17 @@
+services:
+  mini-sandbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+    container_name: mini-sandbox-dev
+
+    working_dir: /workspace
+
+    volumes:
+      - .:/workspace
+
+    stdin_open: true
+    tty: true
+
+    command: /bin/bash
