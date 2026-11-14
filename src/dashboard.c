@@ -1,5 +1,7 @@
 #include <ncurses.h>
+#include <stdarg.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/types.h>
 
@@ -9,10 +11,15 @@
 
 #define DASHBOARD_MAX_PROCESSES 256
 #define CPU_HISTORY_LENGTH 60
+#define MIN_TABLE_ROWS 3
+#define MIN_COLS 40
+#define FOOTER_ROWS 2
 
 static ResourceSnapshot processes[DASHBOARD_MAX_PROCESSES];
 static size_t process_count = 0;
-static int selected_index = 0;
+static int selected_index = 0;   /* absolute index into processes[] */
+static int scroll_offset = 0;    /* index of first visible table row */
+static int visible_rows = 1;     /* table rows that fit, set by last render */
 static DashboardSortMode sort_mode = SORT_BY_CPU;
 static int compare_cpu(const void *a, const void *b);
 static int compare_memory(const void *a, const void *b);
@@ -22,6 +29,36 @@ static size_t cpu_history_next = 0;
 static pid_t cpu_history_pid = -1;
 static SystemMetrics system_metrics;
 static int has_system_metrics = 0;
+
+/* Clamp selection into [0, count) and scroll so it stays inside a
+   viewport of `rows` lines. */
+static void clamp_view(int rows) {
+  int count = (int)process_count;
+
+  if (rows < 1) {
+    rows = 1;
+  }
+
+  if (count == 0) {
+    selected_index = 0;
+    scroll_offset = 0;
+    return;
+  }
+
+  if (selected_index < 0) selected_index = 0;
+  if (selected_index >= count) selected_index = count - 1;
+
+  if (selected_index < scroll_offset) {
+    scroll_offset = selected_index;
+  }
+  if (selected_index >= scroll_offset + rows) {
+    scroll_offset = selected_index - rows + 1;
+  }
+
+  int max_offset = count > rows ? count - rows : 0;
+  if (scroll_offset > max_offset) scroll_offset = max_offset;
+  if (scroll_offset < 0) scroll_offset = 0;
+}
 
 static void reset_cpu_history(pid_t pid) {
   cpu_history_count = 0;
@@ -68,6 +105,7 @@ void dashboard_set_processes(const ResourceSnapshot *snapshots, size_t count) {
   if (snapshots == NULL) {
     process_count = 0;
     selected_index = 0;
+    scroll_offset = 0;
     return;
   }
 
@@ -75,17 +113,18 @@ void dashboard_set_processes(const ResourceSnapshot *snapshots, size_t count) {
     count = DASHBOARD_MAX_PROCESSES;
   }
 
+  /* Remember the selected PID so the selection follows the process
+     across re-sorts instead of sticking to a rank. */
+  pid_t selected_pid = -1;
+  if (selected_index >= 0 && selected_index < (int)process_count) {
+    selected_pid = processes[selected_index].pid;
+  }
+
   for (size_t i = 0; i < count; i++) {
     processes[i] = snapshots[i];
   }
 
   process_count = count;
-
-  if (process_count == 0) {
-    selected_index = 0;
-  } else if (selected_index >= (int)process_count) {
-    selected_index = (int)process_count -1;
-  }
 
   if (sort_mode == SORT_BY_CPU) {
     qsort(processes, process_count,
@@ -95,6 +134,14 @@ void dashboard_set_processes(const ResourceSnapshot *snapshots, size_t count) {
     qsort(processes, process_count, sizeof(ResourceSnapshot), compare_memory);
   }
 
+  for (size_t i = 0; i < process_count; i++) {
+    if (processes[i].pid == selected_pid) {
+      selected_index = (int)i;
+      break;
+    }
+  }
+
+  clamp_view(visible_rows);
   record_cpu_history();
 }
 
@@ -122,19 +169,91 @@ static int compare_memory(const void *a, const void *b) {
     return 0;
 }
 
-static void render_header(void) {
+/* ---- Bounds-checked drawing: nothing is written outside the screen and
+   strings are truncated at the right edge instead of wrapping. ---- */
+
+__attribute__((format(printf, 3, 4)))
+static void put(int row, int col, const char *fmt, ...) {
+  if (row < 0 || row >= LINES || col < 0 || col >= COLS) {
+    return;
+  }
+
+  char buf[256];
+  va_list ap;
+  va_start(ap, fmt);
+  vsnprintf(buf, sizeof(buf), fmt, ap);
+  va_end(ap);
+
+  mvaddnstr(row, col, buf, COLS - col);
+}
+
+static void put_ch(int row, int col, chtype ch) {
+  if (row >= 0 && row < LINES && col >= 0 && col < COLS) {
+    mvaddch(row, col, ch);
+  }
+}
+
+static void hline_at(int row, int col, int width) {
+  if (row >= 0 && row < LINES && col >= 0 && col < COLS && width > 0) {
+    mvhline(row, col, ACS_HLINE, width);
+  }
+}
+
+/* ---- Layout ----
+   gap = 1 keeps the original spacious positions; gap = 0 drops blank
+   separator rows. chart_height = 0 hides the CPU history chart. */
+typedef struct {
+  int gap;
+  int chart_height;
+} Layout;
+
+static const Layout LAYOUTS[] = {
+  {1, 7},   /* large: original layout */
+  {0, 5},   /* medium: no spacing, shorter chart */
+  {0, 0},   /* small: metrics + process table only */
+};
+
+/* Must mirror the row arithmetic of the render_* functions below. */
+static int layout_data_row(Layout l) {
+  int y = 2 + l.gap;                    /* header */
+  y += l.gap ? 5 : 2;                   /* summary */
+  y += 6 + 2 * l.gap;                   /* system metrics */
+  if (l.chart_height > 0) {
+    y += l.chart_height + 2 + l.gap;    /* cpu history */
+  }
+  return y + 3 + 2 * l.gap;             /* table title + header + rule */
+}
+
+static int layout_min_lines(Layout l) {
+  return layout_data_row(l) + MIN_TABLE_ROWS + FOOTER_ROWS;
+}
+
+static int pick_layout(int lines, Layout *out) {
+  for (size_t i = 0; i < sizeof(LAYOUTS) / sizeof(LAYOUTS[0]); i++) {
+    if (lines >= layout_min_lines(LAYOUTS[i])) {
+      *out = LAYOUTS[i];
+      return 1;
+    }
+  }
+  return 0;
+}
+
+/* Each render_* takes its top row and returns the next free row. */
+
+static int render_header(int gap) {
     attron(COLOR_PAIR(1) | A_BOLD);
-    mvprintw(0, 2, "MINI-SANDBOX MONITOR");
+    put(0, 2, "MINI-SANDBOX MONITOR");
     attroff(COLOR_PAIR(1) | A_BOLD);
 
     attron(COLOR_PAIR(2));
-    mvprintw(0, COLS - 12, "LIVE");
+    put(0, COLS - 12, "LIVE");
     attroff(COLOR_PAIR(2));
 
-    mvhline(1, 0, ACS_HLINE, COLS);
+    hline_at(1, 0, COLS);
+    return 2 + gap;
 }
 
-static void render_summary(void) {
+static int render_summary(int y, int gap) {
     unsigned int running = 0;
     unsigned int total_threads = 0;
 
@@ -146,63 +265,40 @@ static void render_summary(void) {
        total_threads += processes[i].threads;
     }
 
-    mvprintw(3, 2, "SYSTEM SUMMARY");
-
-    mvprintw(
-        5, 5,
-        "Processes: %zu",
-        process_count
-    );
-
-    mvprintw(
-        5, 30,
-        "Running: %u",
-        running
-    );
-    mvprintw(
-        5, 55,
-        "Threads: %u",
-        total_threads
-    );
-    mvhline(7, 0, ACS_HLINE, COLS);
-}
-
-static void render_system_summary(void) {
-   mvprintw(8, 2, "SYSTEM METRICS");
-
-    if (!has_system_metrics) {
-        mvprintw(10, 5, "Waiting for system metrics...");
-        return;
+    if (gap) {
+        put(y, 2, "SYSTEM SUMMARY");
+        y += 2;
     }
 
-    mvprintw(
-        10, 5,
-        "CPU Usage: %.2f%% | Logical CPUs: %u",
-        system_metrics.cpu_usage,
-        system_metrics.cpu_count
-    );
+    put(y, 5, "Processes: %zu", process_count);
+    put(y, 30, "Running: %u", running);
+    put(y, 55, "Threads: %u", total_threads);
 
-    mvprintw(
-        11, 5,
-        "Memory Usage: %.2f%% | Used: %lu KB | Available: %lu KB",
-        system_metrics.memory_usage,
-        system_metrics.memory_used_kb,
-        system_metrics.memory_available_kb
-    );
+    hline_at(y + 1 + gap, 0, COLS);
+    return y + 2 + gap;
+}
 
-    mvprintw(
-        12, 5,
-        "Load Average: %.2f / %.2f / %.2f",
-        system_metrics.load_average_1,
-        system_metrics.load_average_5,
-        system_metrics.load_average_15
-    );
+static int render_system_summary(int y, int gap) {
+    put(y, 2, "SYSTEM METRICS");
 
-    mvprintw(
-        13, 5,
-        "Uptime: %lu seconds",
-        system_metrics.uptime_seconds
-    );
+    int r = y + 1 + gap;
+
+    if (!has_system_metrics) {
+        put(r, 5, "Waiting for system metrics...");
+    } else {
+        put(r, 5, "CPU Usage: %.2f%% | Logical CPUs: %u",
+            system_metrics.cpu_usage, system_metrics.cpu_count);
+        put(r + 1, 5, "Memory Usage: %.2f%% | Used: %lu KB | Available: %lu KB",
+            system_metrics.memory_usage, system_metrics.memory_used_kb,
+            system_metrics.memory_available_kb);
+        put(r + 2, 5, "Load Average: %.2f / %.2f / %.2f",
+            system_metrics.load_average_1, system_metrics.load_average_5,
+            system_metrics.load_average_15);
+        put(r + 3, 5, "Uptime: %lu seconds", system_metrics.uptime_seconds);
+    }
+
+    hline_at(r + 4 + gap, 0, COLS);
+    return r + 5 + gap;
 }
 
 static void render_bar(int row, int col, double value, double max_value,
@@ -222,14 +318,20 @@ static void render_bar(int row, int col, double value, double max_value,
   int filled = (int)((value / max_value) * width);
 
   for (int i = 0; i < width; i++) {
-    mvaddch(row, col + i, i < filled ? '#' : '-');
+    put_ch(row, col + i, i < filled ? '#' : '-');
   }
 }
 
-static void render_cpu_history(void) {
-  const int chart_top = 18;
-  const int chart_bottom = 24;
+static int render_cpu_history(int y, int gap, int height) {
+  const int chart_top = y + 1 + gap;
+  const int chart_bottom = chart_top + height - 1;
+  const int chart_mid = (chart_top + chart_bottom) / 2;
   const int chart_left = 10;
+  const int next_row = chart_bottom + 2;
+
+  hline_at(chart_bottom + 1, 0, COLS);
+
+  put(y, 2, "CPU HISTORY - PID: %d (Last 60 Samples)", cpu_history_pid);
 
   int chart_width = COLS - chart_left - 2;
 
@@ -237,29 +339,18 @@ static void render_cpu_history(void) {
     chart_width = CPU_HISTORY_LENGTH;
   }
 
-  if (chart_width <= 0) {
-    return;
+  if (chart_width <= 0 || cpu_history_count == 0) {
+    return next_row;
   }
 
-  if (cpu_history_count == 0) {
-        mvprintw(16, 2, "CPU HISTORY - PID: %d (Last 60 Samples)", cpu_history_pid);
-        return;
-  }
-
-  mvprintw(
-        16, 2,
-        "CPU HISTORY - PID: %d (Last 60 Samples)",
-        cpu_history_pid
-  );
-
-  mvprintw(chart_top, 2, "100%%");
-  mvprintw((chart_top + chart_bottom) / 2, 2, "50%%");
-  mvprintw(chart_bottom, 2, "0%%");
+  put(chart_top, 2, "100%%");
+  put(chart_mid, 2, "50%%");
+  put(chart_bottom, 2, "0%%");
 
   for (int x = chart_left; x < chart_left + chart_width; x++) {
-    mvaddch(chart_top, x, ACS_HLINE);
-    mvaddch((chart_top + chart_bottom) / 2, x, ACS_HLINE);
-    mvaddch(chart_bottom, x, ACS_HLINE);
+    put_ch(chart_top, x, ACS_HLINE);
+    put_ch(chart_mid, x, ACS_HLINE);
+    put_ch(chart_bottom, x, ACS_HLINE);
   }
 
   size_t display_count = cpu_history_count;
@@ -289,36 +380,42 @@ static void render_cpu_history(void) {
       value = 100.0;
     }
 
-    int y = chart_bottom - (int)((value / 100.0) * (chart_bottom - chart_top));
-    int x = chart_left + (int)i;
+    int py = chart_bottom - (int)((value / 100.0) * (chart_bottom - chart_top));
+    int px = chart_left + (int)i;
 
     if (previous_y >= 0) {
-      if (y == previous_y) {
-        mvaddch(y, x, ACS_HLINE);
-      } else if (y < previous_y) {
-        mvaddch(y, x, '/');
+      if (py == previous_y) {
+        put_ch(py, px, ACS_HLINE);
+      } else if (py < previous_y) {
+        put_ch(py, px, '/');
       } else {
-        mvaddch(y, x, '\\');
+        put_ch(py, px, '\\');
       }
     }
 
-    mvaddch(y, x, '*');
+    put_ch(py, px, '*');
 
-    previous_y = y;
+    previous_y = py;
   }
+
+  return next_row;
 }
 
-static void render_process_table(void) {
-    const int header_row = 29;
-    const int first_data_row = 31;
-    const int available_rows = LINES - first_data_row - 3;
+static void render_process_table(int y, int gap) {
+    const int title_row = y + gap;
+    const int header_row = title_row + 1 + gap;
+    const int first_data_row = header_row + 2;
 
     const int cpu_bar_width = 20;
     const int memory_bar_width = 20;
 
-    unsigned long max_rss = 0;
+    visible_rows = LINES - FOOTER_ROWS - first_data_row;
+    if (visible_rows < 1) {
+        visible_rows = 1;
+    }
+    clamp_view(visible_rows);
 
-    mvprintw(27, 2, "PROCESS MONITOR");
+    unsigned long max_rss = 0;
 
     for (size_t i = 0; i < process_count; i++) {
       if (processes[i].vm_rss_kb > max_rss) {
@@ -326,112 +423,136 @@ static void render_process_table(void) {
       }
     }
 
-    mvprintw(header_row, 2, "PID");
-    mvprintw(header_row, 11, "STATE");
-    mvprintw(header_row, 20, "CPU%%");
-    mvprintw(header_row, 30, "CPU USAGE");
-    mvprintw(header_row, 54, "RSS(KB)");
-    mvprintw(header_row, 68, "MEMORY USAGE");
-    mvprintw(header_row, 93, "THREADS");
+    int last_shown = scroll_offset + visible_rows;
+    if (last_shown > (int)process_count) {
+        last_shown = (int)process_count;
+    }
 
-    mvhline(30, 2, ACS_HLINE, COLS - 4);
+    if (process_count > 0) {
+        put(title_row, 2, "PROCESS MONITOR  [%d-%d of %zu]",
+            scroll_offset + 1, last_shown, process_count);
+    } else {
+        put(title_row, 2, "PROCESS MONITOR");
+    }
 
-    if (available_rows <= 0) {
+    put(header_row, 2, "PID");
+    put(header_row, 11, "STATE");
+    put(header_row, 20, "CPU%%");
+    put(header_row, 30, "CPU USAGE");
+    put(header_row, 54, "RSS(KB)");
+    put(header_row, 68, "MEMORY USAGE");
+    put(header_row, 93, "THREADS");
+
+    hline_at(header_row + 1, 2, COLS - 4);
+
+    if (process_count == 0) {
+        put(first_data_row, 2, "No processes");
         return;
     }
 
-    size_t display_count = process_count;
+    for (int visible_row = 0; visible_row < visible_rows; visible_row++) {
+      int process_index = scroll_offset + visible_row;
 
-    if (display_count > (size_t)available_rows) {
-        display_count = (size_t)available_rows;
-    }
+      if (process_index < 0 || process_index >= (int)process_count) {
+        break;
+      }
 
-    for (size_t i = 0; i < display_count; i++) {
-      int row = first_data_row + (int)i;
+      const ResourceSnapshot *p = &processes[process_index];
+      int row = first_data_row + visible_row;
+      int selected = process_index == selected_index;
 
-      if ((int)i == selected_index) {
+      if (selected) {
         attron(A_REVERSE);
       }
 
-      mvprintw(row, 2, "%-8d", processes[i].pid);
-      mvprintw(row, 11, "%-8c", processes[i].state);
-      mvprintw(row, 20, "%7.2f%%", processes[i].cpu_usage);
-      render_bar(
-            row,
-            30,
-            processes[i].cpu_usage,
-            100.0,
-            cpu_bar_width
-        );
-      mvprintw(row, 54, "%-10lu", processes[i].vm_rss_kb);
-      render_bar(
-            row,
-            68,
-            (double)processes[i].vm_rss_kb,
-            (double)max_rss,
-            memory_bar_width
-        );
-      mvprintw(row, 93, "%-8u", processes[i].threads);
+      put(row, 2, "%-8d", p->pid);
+      put(row, 11, "%-8c", p->state);
+      put(row, 20, "%7.2f%%", p->cpu_usage);
+      render_bar(row, 30, p->cpu_usage, 100.0, cpu_bar_width);
+      put(row, 54, "%-10lu", p->vm_rss_kb);
+      render_bar(row, 68, (double)p->vm_rss_kb, (double)max_rss,
+                 memory_bar_width);
+      put(row, 93, "%-8u", p->threads);
 
-      if ((int)i == selected_index) {
+      if (selected) {
         attroff(A_REVERSE);
       }
     }
 }
 
 static void render_footer(void) {
-  mvhline(LINES - 2, 0, ACS_HLINE, COLS);
+  hline_at(LINES - 2, 0, COLS);
 
   const char *sort_label =
         sort_mode == SORT_BY_CPU ? "CPU DESC" : "RSS DESC";
 
-    mvprintw(
-        LINES - 1, 2,
-        "UP/DOWN: Select | c: CPU Sort | m: Memory Sort | Sort: %s | q: Quit",
-        sort_label
-    );
+  put(LINES - 1, 2,
+      "Sort: %s | UP/DOWN PgUp/PgDn Home/End: Select | c: CPU Sort | "
+      "m: Memory Sort | q: Quit",
+      sort_label);
+}
+
+static void render_too_small(void) {
+  put(0, 0, "Terminal too small: %dx%d", COLS, LINES);
+  put(1, 0, "Need at least %dx%d. q: Quit",
+      MIN_COLS, layout_min_lines(LAYOUTS[sizeof(LAYOUTS) / sizeof(LAYOUTS[0]) - 1]));
 }
 
 void dashboard_render(void) {
     erase();
 
-    render_header();
-    render_summary();
-    render_system_summary();
+    Layout layout;
 
-    mvhline(15, 0, ACS_HLINE, COLS);
+    if (COLS < MIN_COLS || !pick_layout(LINES, &layout)) {
+        render_too_small();
+        refresh();
+        return;
+    }
 
-    render_cpu_history();
+    int y = render_header(layout.gap);
+    y = render_summary(y, layout.gap);
+    y = render_system_summary(y, layout.gap);
 
-    mvhline(25, 0, ACS_HLINE, COLS);
+    if (layout.chart_height > 0) {
+        y = render_cpu_history(y, layout.gap, layout.chart_height);
+    }
 
-    render_process_table();
+    render_process_table(y, layout.gap);
     render_footer();
 
     refresh();
 }
 
 void dashboard_handle_input(int key) {
-  int max_visible = LINES - 31 - 3;
+  switch (key) {
+    case KEY_UP:    selected_index--; break;
+    case KEY_DOWN:  selected_index++; break;
+    case KEY_PPAGE: selected_index -= visible_rows; break;
+    case KEY_NPAGE: selected_index += visible_rows; break;
+    case KEY_HOME:  selected_index = 0; break;
+    case KEY_END:   selected_index = (int)process_count - 1; break;
 
-  if (key == KEY_UP && selected_index > 0) {
-        selected_index--;
+    case 'c':
+    case 'C':
+      sort_mode = SORT_BY_CPU;
+      qsort(processes, process_count, sizeof(ResourceSnapshot), compare_cpu);
+      selected_index = 0;
+      scroll_offset = 0;
+      break;
+
+    case 'm':
+    case 'M':
+      sort_mode = SORT_BY_MEMORY;
+      qsort(processes, process_count, sizeof(ResourceSnapshot), compare_memory);
+      selected_index = 0;
+      scroll_offset = 0;
+      break;
+
+    default:
+      /* KEY_RESIZE needs nothing here: ncurses has already updated
+         LINES/COLS and the next render re-picks the layout. */
+      break;
   }
 
-  if (key == KEY_DOWN &&
-        selected_index < (int)process_count - 1 && selected_index < max_visible - 1) {
-        selected_index++;
-  }
-
-  if (key == 'c' || key == 'C') {
-    sort_mode = SORT_BY_CPU;
-    qsort(processes, process_count, sizeof(ResourceSnapshot), compare_cpu);
-    selected_index = 0;
-  }
-
-  if (key == 'm' || key == 'M') {
-    sort_mode = SORT_BY_MEMORY;
-    qsort(processes, process_count, sizeof(ResourceSnapshot), compare_memory);
-    selected_index = 0;
-  }
+  clamp_view(visible_rows);
 }

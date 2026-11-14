@@ -83,14 +83,20 @@ int tui_run(void) {
 
         dashboard_render();
 
-        int key = getch();
+        /* Keys and KEY_RESIZE only re-render; data is re-sampled once
+           getch() times out, so a resize burst doesn't spam samples.
+           ponytail: continuous key presses delay sampling; switch to a
+           monotonic-clock deadline if that ever matters. */
+        int key;
+        while ((key = getch()) != ERR) {
+            if (key == 'q' || key == 'Q') {
+                running = 0;
+                break;
+            }
 
-        if (key == 'q' || key == 'Q') {
-            running = 0;
-            continue;
+            dashboard_handle_input(key);
+            dashboard_render();
         }
-
-        dashboard_handle_input(key);
     }
 
     endwin();
