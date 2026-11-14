@@ -92,5 +92,51 @@ int main(void) {
     printf("CPU Usage: %.2f%%\n", cpu_usage);
     printf("Counter: %llu\n", counter);
 
+
+    ResourceSnapshot resource_snapshot;
+
+if (resource_monitor_collect(
+        getpid(),
+        &resource_snapshot
+    ) == -1) {
+    perror("resource_monitor_collect");
+    return 1;
+}
+
+    printf("\nResource Snapshot:\n");
+    printf("PID: %d\n", resource_snapshot.pid); 
+    printf("State: %c\n", resource_snapshot.state);
+    printf("RSS: %lu kB\n", resource_snapshot.vm_rss_kb);
+    printf("Virtual Memory: %lu kB\n", resource_snapshot.vm_size_kb);
+    printf("Threads: %u\n", resource_snapshot.threads);
+    printf("CPU Ticks: %llu\n", resource_snapshot.cpu_ticks);
+    printf("CPU Usage: %.2f%%\n", resource_snapshot.cpu_usage);
+
+
+    ResourceSnapshot all_snapshots[1024];
+    size_t resource_count = 0;
+
+    if (resource_monitor_collect_all(
+        all_snapshots,
+        1024,
+        &resource_count
+    ) == -1) {
+        perror("resource_monitor_collect_all");
+        return 1;
+    }
+
+    printf("\nAll Resource Snapshots: %zu\n", resource_count);
+
+    for (size_t i = 0; i < resource_count && i < 10; i++) {
+        printf(
+            "PID: %d | State: %c | RSS: %lu kB | "
+            "Threads: %u | CPU Ticks: %llu\n",
+            all_snapshots[i].pid,
+            all_snapshots[i].state,
+            all_snapshots[i].vm_rss_kb,
+            all_snapshots[i].threads,
+            all_snapshots[i].cpu_ticks
+        );
+    }
     return 0;
 }

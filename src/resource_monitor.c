@@ -2,6 +2,8 @@
 
 #include <errno.h>
 #include <unistd.h>
+#include <string.h>
+#include <stdlib.h>
 
 #include "resource_monitor.h"
 
@@ -75,6 +77,92 @@ int resource_monitor_calculate_cpu_usage(
         / elapsed_seconds * 100.0;
 
     *cpu_usage = usage;
+
+    return 0;
+}
+
+int resource_monitor_collect(
+    pid_t pid,
+    ResourceSnapshot *snapshot
+) {
+    if (pid <= 0 || snapshot == NULL) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    ProcessSnapshot process_snapshot;
+    ProcessCpuTimes cpu_times;
+
+    if (inspector_read_process(pid, &process_snapshot) == -1) {
+        return -1;
+    }
+
+    if (inspector_read_cpu_times(pid, &cpu_times) == -1) {
+        return -1;
+    }
+
+    ResourceSnapshot result = {
+        .pid = process_snapshot.pid,
+        .state = process_snapshot.state,
+        .vm_rss_kb = process_snapshot.vm_rss_kb,
+        .vm_size_kb = process_snapshot.vm_size_kb,
+        .threads = process_snapshot.threads,
+        .cpu_ticks = cpu_times.utime_ticks + cpu_times.stime_ticks,
+        .cpu_usage = 0.0
+    };
+
+    *snapshot = result;
+
+    return 0;
+}
+
+int resource_monitor_collect_all(
+    ResourceSnapshot *snapshots,
+    size_t capacity,
+    size_t *count
+) {
+    if (snapshots == NULL || count == NULL || capacity == 0) {
+        errno = EINVAL;
+        return -1;
+    }
+
+    *count = 0;
+
+    ProcessSnapshot *processes = calloc(
+        capacity,
+        sizeof(ProcessSnapshot)
+    );
+
+    if (processes == NULL) {
+        return -1;
+    }
+
+    size_t process_count = 0;
+
+    if (inspector_collect_processes(
+            processes,
+            capacity,
+            &process_count
+        ) == -1) {
+        free(processes);
+        return -1;
+    }
+
+    for (size_t i = 0; i < process_count; i++) {
+        ResourceSnapshot snapshot;
+
+        if (resource_monitor_collect(
+                processes[i].pid,
+                &snapshot
+            ) == -1) {
+            continue;
+        }
+
+        snapshots[*count] = snapshot;
+        (*count)++;
+    }
+
+    free(processes);
 
     return 0;
 }
