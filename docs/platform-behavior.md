@@ -78,3 +78,36 @@ strace -f -tt \
 - No cgroups v2 resource management is available.
 
 - Linux syscall traces are not directly portable to macOS.
+
+- `/proc`-based system and process monitoring is Linux-only (see section 6).
+
+### 6. Cross-platform Build and Platform Boundary
+
+Compiling on a platform is not the same as supporting it at runtime. Both platforms compile from the same sources; their runtime support differs.
+
+| Platform | Compiler    | cJSON source                        | Platform sources      |
+| -------- | ----------- | ----------------------------------- | --------------------- |
+| macOS    | Apple Clang | `brew --prefix cjson` (include/lib) | `src/platform/macos/` |
+| Linux    | GCC         | system (`libcjson-dev`)             | `src/platform/linux/` |
+
+The Makefile picks the directory based on `uname -s`. Code in `src/` is shared. Code that implements an OS-specific interface lives under `src/platform/<os>/` and keeps the header in `include/`.
+
+#### Linux-specific components
+
+| Component | Dependency | macOS status |
+| --------- | ---------- | ------------ |
+| System Inspector (`src/platform/linux/system_inspector.c`) | `/proc/stat`, `/proc/meminfo`, `/proc/loadavg`, `/proc/uptime` | Not implemented. The stub `system_inspector_collect()` fails with `ENOSYS`. No metrics are faked. |
+| Process Inspector (`src/inspector.c`) | `/proc`, `/proc/<pid>/status`, `/proc/<pid>/stat` | Compiles, but fails at runtime because `/proc` does not exist |
+| `close_range` fd cleanup (`src/process.c`) | `SYS_close_range` | Uses the portable fallback path |
+| `PR_SET_NO_NEW_PRIVS` (`src/resource.c`) | `prctl()` | No-op |
+
+As a result, on macOS the IPC server (`sandbox --server`) exits with `Failed to initialize system snapshot`, and TUI system metrics are unavailable. A future macOS System Inspector (e.g. `sysctl` / `host_statistics64`) belongs in `src/platform/macos/system_inspector.c`.
+
+#### IPC SIGPIPE handling
+
+The server must not be killed by `SIGPIPE` when a client disconnects before it reads its response. That write has to fail with `EPIPE` instead. This is handled in one place, `ipc_disable_sigpipe()` / `IPC_SEND_FLAGS` in `src/ipc_server.c`:
+
+- Linux: each `send()` passes `MSG_NOSIGNAL`.
+- macOS: each accepted socket gets `SO_NOSIGPIPE` via `setsockopt()`. This requires `_DARWIN_C_SOURCE`, because `_POSIX_C_SOURCE` hides it.
+
+The NDJSON framing, partial read/write loops and the protocol itself are the same on both platforms.

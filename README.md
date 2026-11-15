@@ -104,13 +104,38 @@ Each record contains:
 
 ### Requirements
 
-- GCC or a compatible C compiler
+- C compiler: Apple Clang (macOS) or GCC (Linux)
 
 - GNU Make or compatible Make implementation
+
+- ncurses and cJSON development libraries
 
 - Python 3.12+
 
 - pytest
+
+### Supported Platforms
+
+| Platform                    | Build | Runtime support                                                                                    |
+| --------------------------- | ----- | -------------------------------------------------------------------------------------------------- |
+| Linux (Ubuntu 24.04/Docker) | Yes   | Full: process execution, resource limits, `/proc` monitoring, TUI metrics, IPC `system.metrics`    |
+| macOS (Apple Clang)         | Yes   | Partial: process execution and resource limits. `/proc`-based monitoring, TUI system metrics and the IPC server are not available |
+
+The same source tree and `Makefile` build on both. The Makefile detects the platform with `uname -s` and compiles `src/platform/<linux|macos>/`. See [docs/platform-behavior.md](docs/platform-behavior.md#6-cross-platform-build-and-platform-boundary) for details.
+
+### Install Dependencies
+
+macOS (Homebrew; ncurses comes with the system SDK):
+
+```bash
+brew install cjson
+```
+
+Linux (Ubuntu 24.04; already installed in the Docker image):
+
+```bash
+sudo apt-get install build-essential libncurses-dev libcjson-dev
+```
 
 ### Build
 
@@ -124,7 +149,7 @@ make clean
 make
 ```
 
-The build produces the `sandbox` executable in the project root.
+The build produces the `sandbox` executable in the project root. On macOS, cJSON is located via `brew --prefix cjson`.
 
 ### Install Test Dependencies
 
