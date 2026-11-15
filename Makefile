@@ -9,7 +9,7 @@ SRCS = $(wildcard $(SRC_DIR)/*.c)
 HEADERS = $(wildcard $(INC_DIR)/*.h)
 
 CFLAGS = -Wall -Wextra -Werror -std=c11 -I$(INC_DIR)
-LDLIBS = -lncurses
+LDLIBS = -lncurses -lcjson
 
 .PHONY: all clean run
 
