@@ -5,6 +5,7 @@
 #include "cli.h"
 #include "process.h"
 #include "tui.h"
+#include "ipc_server.h"
 
 int main(int argc, char *argv[]) {
     CliOptions options;
@@ -26,8 +27,7 @@ int main(int argc, char *argv[]) {
             return tui_run() == 0 ? 0 : 1;
         
         case CLI_ACTION_SERVER:
-            printf("Mini-Sandbox IPC Server\n");
-            return 0;
+            return ipc_server_run() == 0 ? 0 : 1;
 
         case CLI_ACTION_RUN: {
             ProcessResult result;
