@@ -13,6 +13,7 @@ void cli_print_help(const char *program_name) {
     printf("  %s --help\n", program_name);
     printf("  %s --version\n", program_name);
     printf("  %s --tui\n", program_name);
+    printf("  %s server\n", program_name);
     printf(
     "  %s run [--cpu seconds] [--timeout seconds] "
     "[--memory MB] [--file-size MB] [--nofile count] -- [command] [args...] [--cwd directory]\n",
@@ -82,6 +83,11 @@ int cli_parse(int argc, char *argv[], CliOptions *options) {
     if (strcmp(argv[1], "--version") == 0) {
         options->action = CLI_ACTION_VERSION;
         return 0;
+    }
+
+    if (strcmp(argv[1], "--server") == 0) {
+      options->action = CLI_ACTION_SERVER;
+      return 0;
     }
 
     if (strcmp(argv[1], "--tui") == 0) {

@@ -24,6 +24,10 @@ int main(int argc, char *argv[]) {
 
         case CLI_ACTION_TUI:
             return tui_run() == 0 ? 0 : 1;
+        
+        case CLI_ACTION_SERVER:
+            printf("Mini-Sandbox IPC Server\n");
+            return 0;
 
         case CLI_ACTION_RUN: {
             ProcessResult result;
