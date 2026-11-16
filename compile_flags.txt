@@ -1,0 +1,5 @@
+-std=c11
+-Wall
+-Wextra
+-Iinclude
+-I/opt/homebrew/opt/cjson/include
