@@ -61,6 +61,9 @@ static int read_cpu_info(SystemSnapshot *snapshot) {
 
     fclose(file);
 
+    snapshot->valid_fields |= SYSTEM_SNAPSHOT_CPU_COUNTERS;
+    snapshot->valid_fields |= SYSTEM_SNAPSHOT_CPU_COUNT;
+
     return 0;
 }
 
@@ -104,6 +107,9 @@ static int read_memory_info(SystemSnapshot *snapshot) {
         return -1;
     }
 
+    snapshot->valid_fields |= SYSTEM_SNAPSHOT_MEMORY_TOTAL;
+    snapshot->valid_fields |= SYSTEM_SNAPSHOT_MEMORY_AVAILABLE;
+
     return 0;
 }
 
@@ -123,6 +129,8 @@ static int read_load_average(SystemSnapshot *snapshot) {
     );
 
     fclose(file);
+
+    snapshot->valid_fields |= SYSTEM_SNAPSHOT_LOAD_AVERAGE;
 
     return parsed == 3 ? 0 : -1;
 }
@@ -145,6 +153,7 @@ static int read_uptime(SystemSnapshot *snapshot) {
     }
 
     snapshot->uptime_seconds = (unsigned long)uptime;
+    snapshot->valid_fields |= SYSTEM_SNAPSHOT_UPTIME;
 
     return 0;
 }
