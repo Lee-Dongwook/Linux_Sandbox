@@ -172,34 +172,46 @@ static cJSON *ipc_handle_system_metrics(int request_id) {
     cJSON_AddNumberToObject(response, "request_id", request_id);
     cJSON_AddStringToObject(response, "status", "ok");
 
-    cJSON_AddNumberToObject(data, "cpu_usage", metrics.cpu_usage);
-    cJSON_AddNumberToObject(data, "memory_usage", metrics.memory_usage);
+    cJSON_AddNumberToObject(data, "valid_fields", (double)metrics.valid_fields);
 
-    cJSON_AddNumberToObject(
-        data, "memory_used_kb", (double)metrics.memory_used_kb
-    );
+    if (metrics.valid_fields & SYSTEM_METRICS_CPU_USAGE) {
+        cJSON_AddNumberToObject(data, "cpu_usage", metrics.cpu_usage);
+    }
 
-    cJSON_AddNumberToObject(
+    if (metrics.valid_fields & SYSTEM_METRICS_MEMORY_USAGE) {
+      cJSON_AddNumberToObject(data, "memory_usage", metrics.memory_usage);
+
+      cJSON_AddNumberToObject(data, "memory_used_kb",
+                              (double)metrics.memory_used_kb);
+      cJSON_AddNumberToObject(
         data, "memory_available_kb", (double)metrics.memory_available_kb
-    );
+        );
+    }
 
-    cJSON_AddNumberToObject(data, "cpu_count", metrics.cpu_count);
+    if (metrics.valid_fields & SYSTEM_METRICS_CPU_COUNT) {
+        cJSON_AddNumberToObject(data, "cpu_count", metrics.cpu_count);
+    }
 
-    cJSON_AddNumberToObject(
+    if (metrics.valid_fields & SYSTEM_METRICS_LOAD_AVERAGE) {
+        cJSON_AddNumberToObject(
         data, "load_average_1", metrics.load_average_1
-    );
+        );
 
-    cJSON_AddNumberToObject(
+        cJSON_AddNumberToObject(
         data, "load_average_5", metrics.load_average_5
-    );
+        );
 
-    cJSON_AddNumberToObject(
+        cJSON_AddNumberToObject(
         data, "load_average_15", metrics.load_average_15
-    );
+        );
+    }
 
-    cJSON_AddNumberToObject(
+    if (metrics.valid_fields & SYSTEM_METRICS_UPTIME) {
+        cJSON_AddNumberToObject(
         data, "uptime_seconds", (double)metrics.uptime_seconds
-    );
+        );
+    }
+    
 
     cJSON_AddItemToObject(response, "data", data);
 
