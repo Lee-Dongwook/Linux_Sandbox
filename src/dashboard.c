@@ -286,15 +286,44 @@ static int render_system_summary(int y, int gap) {
     if (!has_system_metrics) {
         put(r, 5, "Waiting for system metrics...");
     } else {
-        put(r, 5, "CPU Usage: %.2f%% | Logical CPUs: %u",
-            system_metrics.cpu_usage, system_metrics.cpu_count);
-        put(r + 1, 5, "Memory Usage: %.2f%% | Used: %lu KB | Available: %lu KB",
-            system_metrics.memory_usage, system_metrics.memory_used_kb,
-            system_metrics.memory_available_kb);
-        put(r + 2, 5, "Load Average: %.2f / %.2f / %.2f",
-            system_metrics.load_average_1, system_metrics.load_average_5,
-            system_metrics.load_average_15);
-        put(r + 3, 5, "Uptime: %lu seconds", system_metrics.uptime_seconds);
+      if (system_metrics.valid_fields & SYSTEM_METRICS_CPU_USAGE) {
+          put(r, 5, "CPU USAGE: %.2f%%", system_metrics.cpu_usage);
+      } else {
+        put(r, 5, "CPU USAGE: N/A");
+      }
+
+      if (system_metrics.valid_fields & SYSTEM_METRICS_CPU_COUNT) {
+        put(r, 35, "Logical CPUs: %u", system_metrics.cpu_count);
+      } else {
+        put (r, 35, "Logical CPUs: N/A");
+      }
+
+      if (system_metrics.valid_fields & SYSTEM_METRICS_MEMORY_USAGE) {
+            put(r + 1, 5,
+                "Memory Usage: %.2f%% | Used: %lu KB | Available: %lu KB",
+                system_metrics.memory_usage,
+                system_metrics.memory_used_kb,
+                system_metrics.memory_available_kb);
+      } else {
+            put(r + 1, 5, "Memory Usage: N/A");
+      }
+
+      if (system_metrics.valid_fields & SYSTEM_METRICS_LOAD_AVERAGE) {
+            put(r + 2, 5,
+                "Load Average: %.2f / %.2f / %.2f",
+                system_metrics.load_average_1,
+                system_metrics.load_average_5,
+                system_metrics.load_average_15);
+      } else {
+            put(r + 2, 5, "Load Average: N/A");
+      }
+
+      if (system_metrics.valid_fields & SYSTEM_METRICS_UPTIME) {
+            put(r + 3, 5, "Uptime: %lu seconds",
+                system_metrics.uptime_seconds);
+      } else {
+            put(r + 3, 5, "Uptime: N/A");
+      }
     }
 
     hline_at(r + 4 + gap, 0, COLS);
