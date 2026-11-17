@@ -4,7 +4,16 @@
 
 #include "system_inspector.h"
 
+typedef enum {
+    SYSTEM_METRICS_CPU_USAGE = 1U << 0,
+    SYSTEM_METRICS_MEMORY_USAGE = 1U << 1,
+    SYSTEM_METRICS_CPU_COUNT = 1U << 2,
+    SYSTEM_METRICS_LOAD_AVERAGE = 1U << 3,
+    SYSTEM_METRICS_UPTIME = 1U << 4
+} SystemMetricsField;
+
 typedef struct {
+    unsigned int valid_fields;
     double cpu_usage;
     double memory_usage;
 
